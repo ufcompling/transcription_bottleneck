@@ -363,7 +363,7 @@ def main():
 		together = pd.concat([previous_train, increment_file])
 		together.to_csv(sub_datadir + 'train.' + size + '.input', index = False)
 #		os.system('cat ' + previous_datadir + 'train.' + size + '.input ' + previous_datadir + 'increment.input >' + sub_datadir + 'train.' + size + '.input')
-#		os.system('mv ' + previous_datadir + 'residual.input ' + sub_datadir + 'select.' + size + '.input')
+		os.system('mv ' + previous_datadir + 'residual.input ' + sub_datadir + 'select.' + size + '.input')
 
 	print('loading data')
 	train_data = ''
