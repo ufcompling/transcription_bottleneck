@@ -85,7 +85,7 @@ class DataCollatorCTCWithPadding:
 		return batch
 
 def get_data_reg(data_path, file):
-	c = 0
+
 	## Define n-gram LM file
 	lm_text = data_path + 'lm.txt'
 	lm = data_path + 'lm.arpa'
@@ -109,33 +109,36 @@ def get_data_reg(data_path, file):
 
 	## Getting audio data
 	data = []
+	long_wav = []
+	long_transc = ""
 	duration = 0
 	words = []
 
 	for i in range(len(path_list)):
 		wav_path = path_list[i]
-		print(wav_path)
 		transcript = clean_sent(transcript_list[i])
 	#	sr = 16000
-		signal, sr = sf.read(wav_path)
+		wavform, sr = sf.read(wav_path)
 
-		if signal.shape[-1] == 2:
-		#	print(signal)
-			c += 1
-			signal = np.average(signal, axis = 1)
-		#	print(signal)
-		#	print('\n')
-		entry = {}
-		duration += len(signal) / sr
-		words = words + transcript.split()
-		entry["sentence"] = transcript.replace("\n", " ")				
-		entry["audio"] = {"sampling_rate" : sr, "array" : signal}
-		data.append(entry)
+		long_transc = long_transc + " " + transcript
+				
+		try:
+			long_wav = np.concatenate([long_wav, wavform])
+		except:
+			pass
 
-#	print(len(words))
-#	print(len(set(words)))
-	print(duration)
-	print('Two arrays: ', c)
+		if (len(long_wav) / sr)>=5:
+			entry = {}
+			duration += len(long_wav)
+			words = words + long_transc.split()
+			entry["sentence"] = long_transc.replace("\n", " ")				
+			entry["audio"] = {"sampling_rate" : sr, "array" : long_wav}
+			data.append(entry)
+
+			long_wav = []
+			long_transc = ""
+
+	print('Duration:', duration / 16000)
 	return data
 
 
@@ -154,11 +157,6 @@ def train(lang, data_path, size, select_interval, select, method, train_data, te
 	vocab_dict = {v: k for k, v in enumerate(sorted(vocab))}
 	vocab_dict["|"] = vocab_dict[" "]
 	del vocab_dict[" "]
-#	print('Vocab size:', len(vocab_dict))
-#	vocab_dict["[UNK]"] = len(vocab_dict)
-#	vocab_dict["[PAD]"] = len(vocab_dict)
-#	print('Vocab size:', len(vocab_dict))
-
 	with open('vocab.json', 'w') as vocab_file:
 		json.dump(vocab_dict, vocab_file, ensure_ascii=False)
 	
@@ -323,7 +321,7 @@ def main():
 		select_dur = 0
 
 		for tok in combined_data:
-			if initial_train_dur < 30.5 * 60:
+			if initial_train_dur < 31 * 60:
 				initial_train_data.append(tok)
 				initial_train_dur += float(tok[-2])
 			else:
@@ -339,9 +337,9 @@ def main():
 		initial_train_speaker_list = [tok[-1] for tok in initial_train_data]
 
 		initial_train_output = pd.DataFrame({'path': initial_train_wav_path_list,
-			  	'transcript': initial_train_transcript_list,
-			  	'duration': initial_train_dur_list,
-			  	'speaker': initial_train_speaker_list})
+				'transcript': initial_train_transcript_list,
+				'duration': initial_train_dur_list,
+				'speaker': initial_train_speaker_list})
 
 		initial_train_output.to_csv(sub_datadir + 'train.' + size + '.input', index = False)
 
@@ -351,19 +349,15 @@ def main():
 		select_speaker_list = [tok[-1] for tok in select_data]
 
 		select_output = pd.DataFrame({'path': select_wav_path_list,
-			  	'transcript': select_transcript_list,
-			  	'duration': select_dur_list,
-			  	'speaker': select_speaker_list})
+				'transcript': select_transcript_list,
+				'duration': select_dur_list,
+				'speaker': select_speaker_list})
 
 		select_output.to_csv(sub_datadir + 'select.' + size + '.input', index = False)
 
 	if select not in ['0', 'all']:
-		previous_train = pd.read_csv(previous_datadir + 'train.' + size + '.input')
-		increment_file = pd.read_csv(previous_datadir + 'increment.input')
-		together = pd.concat([previous_train, increment_file])
-		together.to_csv(sub_datadir + 'train.' + size + '.input', index = False)
-#		os.system('cat ' + previous_datadir + 'train.' + size + '.input ' + previous_datadir + 'increment.input >' + sub_datadir + 'train.' + size + '.input')
-#		os.system('mv ' + previous_datadir + 'residual.input ' + sub_datadir + 'select.' + size + '.input')
+		os.system('cat ' + previous_datadir + 'train.' + size + '.input ' + previous_datadir + '/increment.input >' + sub_datadir + 'train.' + size + '.input')
+		os.system('mv ' + previous_datadir + 'residual.input ' + sub_datadir + 'select.' + size + '.input')
 
 	print('loading data')
 	train_data = ''
@@ -371,6 +365,7 @@ def main():
 		print(sub_datadir + '/train.' + size + '.input')
 		train_data = get_data_reg(sub_datadir, 'train.' + size + '.input')
 	else:
+		print('Full training data')
 		train_data = get_data_reg(data_path, 'train.csv')
 
 	test_data = get_data_reg(data_path, 'test.csv')

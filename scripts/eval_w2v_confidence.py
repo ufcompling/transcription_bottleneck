@@ -5,41 +5,63 @@ import soundfile as sf
 from datasets import load_metric
 from jiwer import wer
 import torch
+import torchaudio
+import torchaudio.sox_effects as ta_sox
 from pyctcdecode import build_ctcdecoder
 import numpy as np
 from tqdm import tqdm
-import shutil 
+import shutil
+import pandas as pd
 
-oov_rate = sys.argv[1]
-lang = "Hupa"
+parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument("--lang", type=str, default="hupa")
+parser.add_argument("--data_path", type=str, default="data/")
+parser.add_argument("--size", type=str, default="30") ## initial training size
+parser.add_argument("--interval", type=str, default="5")
+parser.add_argument("--select", type=str, default="0")
+parser.add_argument("--method", type=str, default="al")
+parser.add_argument("--pretrained_model", type=str, default="wav2vec2-large-xlsr-53") #wav2vec2-xls-r-300M, wav2vec2-xls-r-1b, wav2vec2-xls-r-2b
 
-lm_model= "/blue/liu.ying/word_making/data/{}/split/combined_{}.arpa".format(lang, oov_rate)
-data_path = "/blue/liu.ying/word_making/data/{}/split/{}/test/".format(lang, oov_rate)
+args = parser.parse_args()
+lang = (args.lang).capitalize()
+data_path = args.data_path + lang + '/'
+data_path = data_path.replace(u'\xa0', u'')
+size = args.size 
+select_interval = args.interval
+select = args.select
+method = args.method
+pretrained_model = args.pretrained_model
+
+sub_datadir = data_path + '/' + size + '/' + method + '/' + select_interval + '/select' + select + '/'
+
+lm_model= sub_datadir + "lm.arpa"
+if select == 'all':
+	lm_model = data_path + 'lm.arpa'
+
 wer_metric = load_metric("wer")
 cer_metric = load_metric("cer")
 
 chars_to_remove_regex = '[\(\)\_\,\?\.\!\-\;\:\"\“\%\‘\”\�]'
 
 
-
 lm = "no_lm"
 
 # checkpoint = sorted([x for x in os.listdir("./xlsr53_{}/".format(lang+oov_rate)) if "checkpoint" in x], reverse=True)[0]
-checkpoint = max([x for x in os.listdir("./xlsr53_{}/".format(lang+oov_rate)) if "checkpoint" in x], key=lambda y: int(y.split('-')[1]))
+checkpoint = max([x for x in os.listdir('model/' + lang + '/' + '/' + size + '/' + method + '/' + select_interval + '/select' + select + '/' + pretrained_model + '/') if "checkpoint" in x], key=lambda y: int(y.split('-')[1]))
 
-path_models = "./xlsr53_{}/".format(lang+oov_rate)
-path_checkpoint = path_models+checkpoint
+path_models = repo_name = 'model/' + lang + '/' + '/' + size + '/' + method + '/' + select_interval + '/select' + select + '/' + pretrained_model + '/'
+path_checkpoint = path_models + checkpoint
+print('Checkpoint: ' + path_checkpoint)
+print('\n')
 
 if "tokenizer_config.json" not in [x for x in os.listdir(path_checkpoint)]:
 	shutil.copy(path_models+"tokenizer_config.json", path_checkpoint+"/tokenizer_config.json")
 	shutil.copy(path_models+"vocab.json", path_checkpoint+"/vocab.json")
 
-model = AutoModelForCTC.from_pretrained("./xlsr53_{}/{}/".format(lang+oov_rate, checkpoint)).to("cuda")#change
+model = AutoModelForCTC.from_pretrained(path_checkpoint).to("cuda")#change
 
-
-processor = Wav2Vec2Processor.from_pretrained("./xlsr53_{}/{}/".format(lang+oov_rate, checkpoint))
+processor = Wav2Vec2Processor.from_pretrained(path_checkpoint)
 vocab = processor.tokenizer.get_vocab()
-
 
 vocab[' '] = vocab['|']
 del vocab[' ']
@@ -53,98 +75,176 @@ decoder = build_ctcdecoder(
 	beta = 1.5
 )
 
-data = []
-long_wav = []
-long_transc = ""
+to_predict = ['test', 'select']
+if select == 'all':
+	to_predict = ['test']
 
-GS_idx = 0
-print("load data")
+print('To predict: ', to_predict)
 
-for filename in os.listdir(data_path):
-	if ".wav" in filename:
-		
-		with open(data_path+filename.replace(".wav", ".txt"), mode="r", encoding="utf-8") as tfile:
-			transc = tfile.read()
-			transc = transc.replace("\n", " ")
-			transc = re.sub(chars_to_remove_regex, '', transc).lower()
-			# clean transcription
-		if len(transc.split())>0:
-			long_transc = long_transc+ " "+transc
-			w, sr = sf.read(os.path.join(data_path+filename))
-			try:
-				long_wav = np.concatenate([long_wav, w])
-			except:
-				pass
+for target in to_predict:
+	if target == 'test':
+		target_data = pd.read_csv(data_path + 'test.csv')
+	else:
+		target_data = pd.read_csv(sub_datadir + 'select.' + size + '.input') ## to generate confidence scores for
 
-			if (len(long_wav)/sr)>=5:#concatenetion of the corpus to have chunck of at least 23s
-				entry = {}
+	data = []
+
+	GS_idx = 0
+
+	target_path_list = target_data['path'].tolist()
+	target_transcript_list = target_data['transcript'].tolist()
+	target_dur_list = target_data['duration'].tolist()
+	target_speaker_list = target_data['speaker'].tolist()
+
+	print(target, 'duration: ', sum([float(dur) for dur in target_dur_list]) / 60)
+	print('\n')
+
+	for i in range(len(target_data)):
+		transc = target_transcript_list[i]
+		transc = re.sub(chars_to_remove_regex, '', transc).lower()
+
+		wav_path = target_path_list[i]
+	#	sr = 16000
+		signal, sr = sf.read(wav_path)
+
+	#	signal, sr = torchaudio.load(wav_path)
+
+		entry = {}
 				
-				entry["sentence"] = long_transc
-			
-				entry["audio"] = {"sampling_rate" : sr, "array" : long_wav}
-				data.append(entry)
-				long_wav = []
-				long_transc = ""
+		entry["sentence"] = transc			
+		entry["audio"] = {"sampling_rate" : sr, "array" : signal}
+		entry['path'] = wav_path
+		data.append(entry)
 
-print("generate predictions")
+	print("generate predictions")
 
-signals = [x["audio"]["array"] for x in data]
-sentences = [x["sentence"] for x in data]
+	signals = [x["audio"]["array"] for x in data]
+	sentences = [x["sentence"] for x in data]
 
-preds = []
-logit_confidence_scores = []
-lm_confidence_scores = []
+	preds = []
+	logit_confidence_scores = []
+	lm_confidence_scores = []
 
-for i in tqdm(range(0, len(signals), 10)):
-	sig = signals[i:i+10]
-	inputs = processor(sig, return_tensors="pt", padding=True, sampling_rate=16000).input_values.to("cuda")
-	with torch.no_grad():
-		logits = model(inputs).logits.to("cpu").numpy()
-	print(logits.shape)
-
-	decoded = []
-	logit_scores = []
-	lm_scores = []
+	for i in tqdm(range(0, len(signals), 1)):
+		sig = signals[i:i+1]
+		inputs = processor(sig, return_tensors="pt", padding=True, sampling_rate=16000).input_values.to("cuda")
+		if inputs.shape[-1] == 2:
+	#		print('Abnormal')
+	#		print(sig)
+			sig = [np.average(sig[0], axis = 1)]
+	#		print(sig)
+			inputs = processor(sig, return_tensors="pt", padding=True, sampling_rate=16000).input_values.to("cuda")
+		else:
+			pass
+	#		print(sig)
+	#	print('A', inputs.shape)
+		with torch.no_grad():
+	#		print('B', model(inputs).logits.shape)
+			logits = model(inputs).logits.to("cpu").numpy()
+	#		print('C', logits.shape)
+	#	print('\n')
+		decoded = []
+		logit_scores = []
+		lm_scores = []
 	
-	for ids in logits:
+		for ids in logits:
 	#	beam_string = decoder.decode(ids).lower()
-		beam_info = decoder.decode_beams(ids)[0]
-		beam_string = beam_info[0]
-		beam_logit_score = beam_info[-2]
-		beam_lm_score = beam_info[-1]
+			beam_info = decoder.decode_beams(ids)[0]
+			beam_string = beam_info[0]
+			decoded.append(beam_string)
 
-		decoded.append(beam_string)
-		logit_scores.append(beam_logit_score)
-		lm_scores.append(beam_lm_score)
-		print(beam_string)
-		print(beam_logit_score, beam_lm_score)
+			if target == 'select':
+				beam_logit_score = beam_info[-2]
+				beam_lm_score = beam_info[-1]
+
+				logit_scores.append(beam_logit_score)
+				lm_scores.append(beam_lm_score)
 
 	#	beam_score = decoder.decode(ids, output_word_offsets=True).lm_score
 	#	beam_score = beam_score / len(beam_string.split(" "))
 
 	#	output = processor.batch_decode(ids, output_word_offsets=True)
 	
-	preds = preds + decoded
-	logit_confidence_scores += logit_scores
-	lm_confidence_scores += lm_scores
+		preds = preds + decoded
+		if target == 'select':
+			logit_confidence_scores += logit_scores
+			lm_confidence_scores += lm_scores
+
 	
 #	confidence_scores += [score / len(t.split(" ")) for score, t in zip(output.lm_score, output.text)]
 
-#####ready for eval#####
-with open("output_xlsr_{}{}_confidence.txt".format(lang, oov_rate), mode="w", encoding="utf-8") as tfile:
-	for i in range(len(preds)):
-		pred = preds[i].replace("\n", " ")
-		ref = sentences[i].replace("\n", " ")
-		logit_confidence_score = logit_confidence_scores[i]
-		lm_confidence_score = lm_confidence_scores[i]
-		tfile.write("prediction:  "+ pred+",")
-		tfile.write("reference:   "+ ref+"\n")
-		tfile.write("logit confidence score: " + float(logit_confidence_score) + '\n')
-		tfile.write("lm confidence score: " + float(lm_confidence_score) + '\n')
-		print("prediction:", pred)
-		print("reference:", ref)
-		print("logit confidence score:", logit_confidence_score)
-		print("lm confidence score:", lm_confidence_score)
-print(wer_metric.compute(predictions=preds, references=sentences))
-print(cer_metric.compute(predictions=preds, references=sentences))
+	with open(sub_datadir + pretrained_model + '_' + target + '_preds.txt', 'w') as f:
+		for pred in preds:
+			f.write(pred + '\n')
 
+	with open(sub_datadir + pretrained_model + '_' + target + '_eval.txt', 'w') as f:
+		f.write('WER: ' + str(wer_metric.compute(predictions=preds, references=sentences)) + '\n')
+		f.write('CER: ' + str(cer_metric.compute(predictions=preds, references=sentences)) + '\n')
+
+	if target == 'select':
+		confidence_dict = {}
+		for i in range(len(sentences)):
+			confidence_dict[target_path_list[i] + '\t' + sentences[i] + '\t' + str(target_dur_list[i]) + '\t' + target_speaker_list[i]] = logit_confidence_scores[i]
+
+		sorted_confidence_dict = sorted(confidence_dict.items(), key = lambda item: item[1])
+		increment_data = []
+		increment_dur = 0
+		residual_data = []
+		residual_dur = 0
+		for tok in sorted_confidence_dict:
+			info = tok[0].split('\t')
+			dur = info[-2]
+			if increment_dur < (int(select_interval) + 0.5) * 60:		
+				increment_data.append(info)		
+				increment_dur += float(dur)
+			else:
+				residual_data.append(info)
+				residual_dur += float(dur)
+
+		print('Increment data size: ' + str(increment_dur / 60))
+		print('Residual data size: ' + str(residual_dur / 60))
+
+		increment_wav_path_list = [tok[0] for tok in increment_data]
+		increment_transcript_list = [tok[1] for tok in increment_data]
+		increment_dur_list = [tok[-2] for tok in increment_data]
+		increment_speaker_list = [tok[-1] for tok in increment_data]
+
+		increment_output = pd.DataFrame({'path': increment_wav_path_list,
+			'transcript': increment_transcript_list,
+			'duration': increment_dur_list,
+			'speaker': increment_speaker_list})
+
+		increment_output.to_csv(sub_datadir + 'increment.input', index = False)
+
+		residual_wav_path_list = [tok[0] for tok in residual_data]
+		residual_transcript_list = [tok[1] for tok in residual_data]
+		residual_dur_list = [tok[-2] for tok in residual_data]
+		residual_speaker_list = [tok[-1] for tok in residual_data]
+
+		residual_output = pd.DataFrame({'path': residual_wav_path_list,
+			'transcript': residual_transcript_list,
+			'duration': residual_dur_list,
+			'speaker': residual_speaker_list})
+
+		residual_output.to_csv(sub_datadir + 'residual.input', index = False)
+
+		##### Output confidence scores as an individual file #####
+		with open(sub_datadir + pretrained_model + "_confidence.txt", mode="w", encoding="utf-8") as tfile:
+			for i in range(len(preds)):
+				pred = preds[i].replace("\n", " ")
+				ref = sentences[i].replace("\n", " ")
+				logit_confidence_score = logit_confidence_scores[i]
+				lm_confidence_score = lm_confidence_scores[i]
+				tfile.write("prediction:  "+ pred+",")
+				tfile.write("reference:   "+ ref+"\n")
+				tfile.write("logit confidence score: " + str(float(logit_confidence_score)) + '\n')
+				tfile.write("lm confidence score: " + str(float(lm_confidence_score)) + '\n')
+
+'''
+increment_output = pd.DataFrame({'path': path_list,
+			'transcript': transcript_list,
+			'duration': dur_list,
+			'speaker': speaker_list})
+
+increment_output.to_csv('temp.input', index = False)
+'''
