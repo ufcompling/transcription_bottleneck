@@ -3,7 +3,7 @@
 import io, os, sys
 import pandas as pd
 
-datadir = '/blue/liu.ying/transcription_bottleneck/data/'
+datadir = '/orange/ufdatastudios/zoey.liu/transcription_bottleneck/data/'
 
 select_interval = '15' 
 task = 'asr'
@@ -18,7 +18,7 @@ for size in sizes:
 	header = ['Language', 'Task', 'Size', 'Select_interval', 'Select_size', 'Actual_duration', 'Model', 'Metric', 'Value', 'Method'] #, 'Split']
 	outfile.write(' '.join(tok for tok in header) + '\n')
 
-	for lg in os.listdir('/blue/liu.ying/transcription_bottleneck/pbs/'):
+	for lg in os.listdir('/orange/ufdatastudios/zoey.liu/transcription_bottleneck/data/'):
 		lg = lg.split('_')[0]
 		descriptive = pd.read_csv('descriptive/' + lg + '.txt', sep = '\t')
 		full_train_dur = descriptive['train duration'].tolist()[0]

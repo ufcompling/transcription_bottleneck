@@ -18,8 +18,8 @@ second_string = '''#SBATCH --mail-type=END,FAIL          # Mail events (NONE, BE
 #SBATCH --mail-user=liu.ying@ufl.edu     # Where to send mail	
 #SBATCH --ntasks=1                    # Run on a single CPU
 #SBATCH --cpus-per-task=1                    
-#SBATCH --mem=32gb                     # Job memory request
-#SBATCH --time=48:00:00               # Time limit hrs:min:sec
+#SBATCH --mem=64gb                     # Job memory request
+#SBATCH --time=72:00:00               # Time limit hrs:min:sec
 #SBATCH --output=serial_test_%j.log   # Standard output and error log
 #SBATCH --partition=gpu
 #SBATCH --gpus=a100:1
@@ -44,7 +44,7 @@ if 'h' in full_train_dur:
 else:
 	max_size = int(full_train_dur[ : -3])
 
-pretrained_model = "wav2vec2-xls-r-2b" #wav2vec2-xls-r-300M, wav2vec2-xls-r-1b, wav2vec2-xls-r-2b, wav2vec2-large-xlsr-53
+pretrained_model = "wav2vec2-large-xlsr-53" #"wav2vec2-large-xlsr-53" #wav2vec2-xls-r-300M, wav2vec2-xls-r-1b, wav2vec2-xls-r-2b
 
 method = sys.argv[2]
 
@@ -80,4 +80,5 @@ with open('pbs/' + lg + '_' + size + '_' + select_interval + '_' + method + '.pb
 			
 #		f.write('date' + '\n')
 #		f.write('\n')
+
 

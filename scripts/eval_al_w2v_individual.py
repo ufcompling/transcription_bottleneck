@@ -381,3 +381,4 @@ residual_output = pd.DataFrame({'path': residual_wav_path_list,
 
 residual_output.to_csv(sub_datadir + pretrained_model + '_residual.input', index = False)
 
+

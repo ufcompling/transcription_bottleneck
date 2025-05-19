@@ -106,7 +106,7 @@ def get_data_reg(data_path, file, pretrained_model, select):
 	## Getting text data for training n-gram LM
 	with open(lm_text, 'w') as f:
 		for tok in transcript_list:
-			f.write(tok + '\n')
+			f.write(str(tok) + '\n')
 
 	## Training an n-gram LM
 	os.system('module load gcc')
@@ -120,20 +120,25 @@ def get_data_reg(data_path, file, pretrained_model, select):
 
 	for i in range(len(path_list)):
 		wav_path = path_list[i]
-		transcript = clean_sent(transcript_list[i])
-		signal, samplerate = librosa.load(wav_path, sr=16000)
+		transcript = ''
+		try:
+			transcript = clean_sent(transcript_list[i])
+		except:
+			pass
+		if transcript != '':
+			signal, samplerate = librosa.load(wav_path, sr=16000)
 
-		if signal.shape[-1] == 2:
-		#	print(signal)
-			signal = np.average(signal, axis = 1)
-		#	print(signal)
-		#	print('\n')
-		entry = {}
-		duration += len(signal) / samplerate
-		words = words + transcript.split()
-		entry["sentence"] = transcript.replace("\n", " ")				
-		entry["audio"] = {"sampling_rate" : samplerate, "array" : signal}
-		data.append(entry)
+			if signal.shape[-1] == 2:
+		#		print(signal)
+				signal = np.average(signal, axis = 1)
+		#		print(signal)
+		#		print('\n')
+			entry = {}
+			duration += len(signal) / samplerate
+			words = words + transcript.split()
+			entry["sentence"] = transcript.replace("\n", " ")				
+			entry["audio"] = {"sampling_rate" : samplerate, "array" : signal}
+			data.append(entry)
 
 #	print(len(words))
 #	print(len(set(words)))
@@ -282,10 +287,10 @@ def main():
 	parser.add_argument("--data_path", type=str, default="data/")
 	parser.add_argument("--size", type=str, default="15") ## initial training size
 	parser.add_argument("--interval", type=str, default="15")
-	parser.add_argument("--select", type=str, default="0")
+	parser.add_argument("--select", type=str, default="15")
 	parser.add_argument("--method", type=str, default="al")
 	parser.add_argument("--seed", type=str, default="1")
-	parser.add_argument("--pretrained_model", type=str, default="wav2vec2-large-xlsr-53") #wav2vec2-xls-r-300M, wav2vec2-xls-r-1b, wav2vec2-xls-r-2b
+	parser.add_argument("--pretrained_model", type=str, default="wav2vec2-xls-r-2b") #wav2vec2-xls-r-300M, wav2vec2-xls-r-1b, wav2vec2-large-xlsr-53
 
 	args = parser.parse_args()
 	lang = args.lang
@@ -393,8 +398,8 @@ def main():
 		together = pd.concat([previous_train, increment_file])
 		together.to_csv(sub_datadir + pretrained_model + '_train.' + size + '.input', index = False)
 #		os.system('cat ' + previous_datadir + 'train.' + size + '.input ' + previous_datadir + 'increment.input >' + sub_datadir + 'train.' + size + '.input')
-		if not os.path.isfile(sub_datadir + pretrained_model + '_select.' + size + '.input'):
-			os.system('cp ' + previous_datadir + pretrained_model + '_residual.input ' + sub_datadir + pretrained_model + '_select.' + size + '.input')
+	#	if not os.path.isfile(sub_datadir + pretrained_model + '_select.' + size + '.input'):
+		os.system('cp ' + previous_datadir + pretrained_model + '_residual.input ' + sub_datadir + pretrained_model + '_select.' + size + '.input')
 
 	print('loading data')
 	train_data = ''
@@ -412,4 +417,12 @@ def main():
 
 if __name__ == "__main__":
 	main()
+
+#previous_train = pd.read_csv(previous_datadir + pretrained_model + '_train.' + size + '.input')
+#increment_file = pd.read_csv(previous_datadir + pretrained_model + '_increment.input')
+#together = pd.concat([previous_train, increment_file])
+#together.to_csv(sub_datadir + pretrained_model + '_train.' + size + '.input', index = False)
+#		os.system('cat ' + previous_datadir + 'train.' + size + '.input ' + previous_datadir + 'increment.input >' + sub_datadir + 'train.' + size + '.input')
+#if not os.path.isfile(sub_datadir + pretrained_model + '_select.' + size + '.input'):
+#os.system('cp ' + previous_datadir + pretrained_model + '_residual.input ' + sub_datadir + pretrained_model + '_select.' + size + '.input')
 
