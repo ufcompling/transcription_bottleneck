@@ -28,7 +28,11 @@ if 'h' in full_train_dur:
 else:
 	max_size = int(full_train_dur[ : -3])
 
+<<<<<<< HEAD
 pretrained_model = "wav2vec2-xls-r-2b"
+=======
+pretrained_model = "wav2vec2-large-xlsr-53" #"wav2vec2-xls-r-2b"
+>>>>>>> 644c7d9e26d72a5fe24f6887da0745ffc880f538
 
 data_path = '/orange/ufdatastudios/zoey.liu/transcription_bottleneck/data/' + lg + '/'
 n_random_splits = 1
@@ -109,3 +113,7 @@ for tok in size_list:
 	select_output.to_csv(data_path + size + '/random/' + seed + '/' + select_interval + '/select' + str(tok - int(size)) + '/' + pretrained_model + '_select.' + size + '.input', index = False)
 
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 644c7d9e26d72a5fe24f6887da0745ffc880f538

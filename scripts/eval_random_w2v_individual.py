@@ -200,3 +200,7 @@ print(len(test_predictions))
 with open(sub_datadir + pretrained_model + '_test_eval.txt', 'w') as f:
 	f.write('WER: ' + str(wer_metric.compute(predictions=test_predictions, references=test_sentences)) + '\n')
 	f.write('CER: ' + str(cer_metric.compute(predictions=test_predictions, references=test_sentences)) + '\n')
+<<<<<<< HEAD
+=======
+
+>>>>>>> 644c7d9e26d72a5fe24f6887da0745ffc880f538
