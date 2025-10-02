@@ -84,12 +84,17 @@ class DataCollatorCTCWithPadding:
 
 		return batch
 
-def get_data_reg(data_path, file):
+def get_data_reg(data_path, file, pretrained_model, select):
 	c = 0
 	## Define n-gram LM file
-	lm_text = data_path + 'lm.txt'
-	lm = data_path + 'lm.arpa'
-	lm_vocab = data_path + 'vocab.txt'
+	lm_text = data_path + pretrained_model + '_lm.txt' ## for self-training, the language model is the same, assuming there is no transcripts for the remaining data
+	lm = data_path + pretrained_model + '_lm.arpa'
+	lm_vocab = data_path + pretrained_model + '_vocab.txt'
+
+	if select == 'all':
+		lm_text = data_path + 'lm.txt'
+		lm = data_path + 'lm.arpa'
+		lm_vocab = data_path + 'vocab.txt'
 
 	data_path = data_path + file
 	data_path = data_path.replace(u'\xa0', u'')
@@ -273,10 +278,10 @@ def main():
 	parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 	parser.add_argument("--lang", type=str, default="hupa")
 	parser.add_argument("--data_path", type=str, default="data/")
-	parser.add_argument("--size", type=str, default="30") ## initial training size
+	parser.add_argument("--size", type=str, default="5") ## initial training size
 	parser.add_argument("--interval", type=str, default="5")
 	parser.add_argument("--select", type=str, default="0")
-	parser.add_argument("--method", type=str, default="al")
+	parser.add_argument("--method", type=str, default="selftrain")
 	parser.add_argument("--pretrained_model", type=str, default="wav2vec2-large-xlsr-53") #wav2vec2-xls-r-300M, wav2vec2-xls-r-1b, wav2vec2-xls-r-2b
 
 	args = parser.parse_args()
@@ -298,82 +303,41 @@ def main():
 		os.system('mkdir ' + data_path + size + '/' + method + '/' + select_interval)
 
 	if not os.path.exists(data_path + size + '/' + method + '/' + select_interval + '/select' + select):
-		os.system('mkdir ' + data_path + size + '/' + method + '/' + select_interval + '/select' + select)
+		os.system('mkdir ' + data_path + size + '/' + method + '/' + select_interval + '/' + '/select' + select)
 
-	sub_datadir = ''
-	if select not in ['all']:
-		sub_datadir = data_path + '/' + size + '/' + method + '/' + select_interval + '/select' + select + '/'
+	al_sub_datadir = data_path + '/' + size + '/al/' + select_interval + '/' + '/select' + select + '/'
+	sub_datadir = data_path + '/' + size + '/' + method + '/' + select_interval + '/' + '/select' + select + '/'
 
-	previous_datadir = ''
-	if select not in ['0', 'all']:
-		previous_datadir = data_path + '/' + size + '/' + method + '/' + select_interval + '/select' + str(int(select) - int(select_interval)) + '/'
+	train_f = pd.read_csv(al_sub_datadir + pretrained_model + '_train.' + size + '.input')
+	train_f_transcript_list = train_f['path'].tolist()
+	train_f_path_list = train_f['path'].tolist()
+	train_f_dur_list = train_f['duration'].tolist()
+	train_f_speaker_list = train_f['speaker'].tolist()
 
-	if select == '0':
-		original_data = pd.read_csv(data_path + 'train.csv')
-		path_list = original_data['path']
-		transcript_list = original_data['transcript']
-		dur_list = original_data['duration']
-		speaker_list = original_data['speaker']
-		combined_data = [list(tok) for tok in zip(path_list, transcript_list, dur_list, speaker_list)]
-		shuffle(combined_data)
-		
-		initial_train_data = []
-		initial_train_dur = 0
-		select_data = []
-		select_dur = 0
+	select_f = pd.read_csv(al_sub_datadir + pretrained_model + '_select.' + size + '.input')
+	select_f_path_list = select_f['path'].tolist()
+	select_f_dur_list = select_f['duration'].tolist()
+	select_f_speaker_list = select_f['speaker'].tolist()
 
-		for tok in combined_data:
-			if initial_train_dur < 30.5 * 60:
-				initial_train_data.append(tok)
-				initial_train_dur += float(tok[-2])
-			else:
-				select_data.append(tok)
-				select_dur += float(tok[-2])
+	select_preds = al_sub_datadir + pretrained_model + '_select_preds.txt'
+	select_preds_transcript_list = []
+	with open(select_preds) as f:
+		for line in f:
+			line = line.strip()
+			select_preds_transcript_list.append(line)
 
-		print('Initial training data size: ' + str(initial_train_dur / 60))
-		print('Select data size: ' + str(select_dur / 60))
+	train_output = pd.DataFrame({'path': train_f_path_list + select_f_path_list,
+			  	'transcript': train_f_transcript_list + select_preds_transcript_list,
+			  	'duration': train_f_dur_list + select_f_dur_list,
+			  	'speaker': train_f_speaker_list + select_f_speaker_list})
 
-		initial_train_wav_path_list = [tok[0] for tok in initial_train_data]
-		initial_train_transcript_list = [tok[1] for tok in initial_train_data]
-		initial_train_dur_list = [tok[-2] for tok in initial_train_data]
-		initial_train_speaker_list = [tok[-1] for tok in initial_train_data]
-
-		initial_train_output = pd.DataFrame({'path': initial_train_wav_path_list,
-			  	'transcript': initial_train_transcript_list,
-			  	'duration': initial_train_dur_list,
-			  	'speaker': initial_train_speaker_list})
-
-		initial_train_output.to_csv(sub_datadir + 'train.' + size + '.input', index = False)
-
-		select_wav_path_list = [tok[0] for tok in select_data]
-		select_transcript_list = [tok[1] for tok in select_data]
-		select_dur_list = [tok[-2] for tok in select_data]
-		select_speaker_list = [tok[-1] for tok in select_data]
-
-		select_output = pd.DataFrame({'path': select_wav_path_list,
-			  	'transcript': select_transcript_list,
-			  	'duration': select_dur_list,
-			  	'speaker': select_speaker_list})
-
-		select_output.to_csv(sub_datadir + 'select.' + size + '.input', index = False)
-
-	if select not in ['0', 'all']:
-		previous_train = pd.read_csv(previous_datadir + 'train.' + size + '.input')
-		increment_file = pd.read_csv(previous_datadir + 'increment.input')
-		together = pd.concat([previous_train, increment_file])
-		together.to_csv(sub_datadir + 'train.' + size + '.input', index = False)
-#		os.system('cat ' + previous_datadir + 'train.' + size + '.input ' + previous_datadir + 'increment.input >' + sub_datadir + 'train.' + size + '.input')
-		os.system('mv ' + previous_datadir + 'residual.input ' + sub_datadir + 'select.' + size + '.input')
+	train_output.to_csv(sub_datadir + pretrained_model + '_train.' + size + '.input', index = False)
 
 	print('loading data')
-	train_data = ''
-	if select not in ['all']:
-		print(sub_datadir + '/train.' + size + '.input')
-		train_data = get_data_reg(sub_datadir, 'train.' + size + '.input')
-	else:
-		train_data = get_data_reg(data_path, 'train.csv')
-
-	test_data = get_data_reg(data_path, 'test.csv')
+	train_data = get_data_reg(sub_datadir, pretrained_model + '_train.' + size + '.input', pretrained_model, select)
+	print(len(train_data))
+	
+	test_data = get_data_reg(data_path, 'test.csv', pretrained_model, select)
 
 	train(lang, data_path, size, select_interval, select, method, train_data, test_data, pretrained_model)
 

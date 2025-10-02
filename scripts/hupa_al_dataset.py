@@ -27,7 +27,6 @@ if not os.path.exists('data/' + lg):
 
 data_path = 'audio/' + lg + '/'
 output_path = 'data/' + lg + '/'
-n_random_splits = 3
 
 wav_path = data_path + 'wav/'
 transcript_path = data_path + 'txt/'
@@ -52,63 +51,6 @@ for file in os.listdir(wav_path):
 			data.append([file, transcript, dur])
 		else:
 			pass
-
-for i in range(1, n_random_splits):
-	i += 1
-	i = str(i)
-	random.shuffle(data)
-
-	train_dur = 0
-	test_dur = 0
-	train_data = []
-	test_data = []
-
-	for tok in data:
-		if train_dur <= total_dur * 0.8:
-			train_data.append(tok)
-			train_dur += tok[-1]
-		else:
-			test_data.append(tok)
-			test_dur += tok[-1]
-
-	print(n_random_splits)
-	train_dur = train_dur / 3600
-	test_dur = test_dur / 3600
-	train_h = int(train_dur)
-	train_min = int((train_dur - train_h) * 60)
-	test_h = int(test_dur)
-	test_min = int((test_dur - test_h) * 60)
-
-	with open('descriptive/' + lg + '.txt', 'w') as f:
-		f.write('train duration\ttest duration' + '\n')
-		f.write(str(train_h) + 'h' + str(train_min) + 'min\t' + str(test_h) + 'h' + str(test_min) + 'min' + '\n')
-	print('train duration: ' + str(train_h) + 'h' + str(train_min) + 'min')
-	print('test duration: ' + str(test_h) + 'h' + str(test_min) + 'min')
-	print('')
-
-	train_wav_path_list = [wav_path + tok[0] for tok in train_data]
-	train_transcript_list = [tok[1] for tok in train_data]
-	train_dur_list = [tok[-1] for tok in train_data]
-	if lg == 'Hupa':
-		train_speaker_list = ['verdena'] * len(train_dur_list)
-	train_output = pd.DataFrame({'path': train_wav_path_list,
-			  	'transcript': train_transcript_list,
-			  	'duration': train_dur_list,
-			  	'speaker': train_speaker_list})
-
-	train_output.to_csv(output_path + 'train_' + str(i) + '.csv', index = False)
-
-	test_wav_path_list = [wav_path + tok[0] for tok in test_data]
-	test_transcript_list = [tok[1] for tok in test_data]
-	test_dur_list = [tok[-1] for tok in test_data]
-	if lg == 'Hupa':
-		test_speaker_list = ['verdena'] * len(test_dur_list)
-	test_output = pd.DataFrame({'path': test_wav_path_list,
-			  	'transcript': test_transcript_list,
-			  	'duration': test_dur_list,
-			  	'speaker': test_speaker_list})
-
-	test_output.to_csv(output_path + 'test_' + str(i) + '.csv', index = False)
 
 ### Now outputing data with the top tier as the test set and the second tier as the training set
 
@@ -137,7 +79,7 @@ for tok in data:
 			  	'duration': train_dur_list,
 			  	'speaker': train_speaker_list})
 
-	train_output.to_csv(output_path + 'train_4.csv', index = False)
+	train_output.to_csv(output_path + 'train.csv', index = False)
 
 	test_wav_path_list = [wav_path + tok[0] for tok in top_data]
 	test_transcript_list = [tok[1] for tok in top_data]
@@ -149,7 +91,7 @@ for tok in data:
 			  	'duration': test_dur_list,
 			  	'speaker': test_speaker_list})
 
-	test_output.to_csv(output_path + 'test_4.csv', index = False)
+	test_output.to_csv(output_path + 'test.csv', index = False)
 
 top_dur = top_dur / 3600
 second_dur = second_dur / 3600
@@ -161,23 +103,3 @@ print('top duration: ' + str(top_h) + 'h' + str(top_min) + 'min')
 print('second duration: ' + str(second_h) + 'h' + str(second_min) + 'min')
 print('')
 
-'''
-for split in ['train', 'test']: 
-	for file in os.listdir(data_path + split + '/'):
-		if file.endswith('.wav'):
-			wav_path = data_path + split + '/' + file
-			file_name = file.split('.')[0]
-			transcipt_file = data_path + split + '/' + file_name + '.txt'
-			transcript = ''
-			with open(transcipt_file) as f:
-				for line in f:
-					transcript = line.strip()
-
-			wav_path_list.append(wav_path)
-			transcript_list.append(transcript)
-
-	output_data = pd.DataFrame({'path_to_the_wav_file': wav_path_list,
-			  	'transcript': transcript_list})
-
-	output_data.to_csv(data_path + split + '.csv', index = False)
-'''

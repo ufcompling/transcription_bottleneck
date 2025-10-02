@@ -22,5 +22,4 @@ python scripts/train_w2v.py --lang hupa --size 30 --interval 5 --select 0 --meth
 
 python scripts/eval_w2v_confidence.py --lang hupa --size 30 --interval 5 --select 0 --method al
 
-
 date
